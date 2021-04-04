@@ -1,0 +1,208 @@
+---
+title: "Fintech Data EDA"
+author: "Sayyid Muhammad Quthb"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  html_document:
+    toc: true
+    toc_depth: 2
+    toc_float:
+      collapsed: false
+    theme: sandstone
+    highlight: zenburn
+    df_print: paged
+    code_folding: hide
+    
+---
+
+# Overview About the Data:
+
+Lending Club connects people who need money (borrowers) with people who have money (investors). An investor you would want to invest in people who showed a profile of having a high probability of paying  back. This is a  model that will  predict this.  This data is from before they even went public. I used the lending data from 2007-2010 and  classified and predict whether or not the borrower paid back their loan in full. The csv file is in this repository.
+
+Here are what the columns represent:   
+- credit.policy: 1 if the customer meets the credit underwriting criteria of LendingClub.com, and 0 otherwise   
+- purpose: The purpose of the loan (takes values "credit_card", "debt_consolidation", "educational", "major_purchase", "small_business", and "all_other")   
+- int.rate: The interest rate of the loan, as a proportion (a rate of 11% would be stored as 0.11). Borrowers judged by LendingClub.com to be more risky are assigned higher interest rates. (risky <- high int.rate)   
+- installment: The monthly installments owed by the borrower if the loan is funded   
+- log.annual.inc: The natural log of the self-reported annual income of the borrower   
+- dti: The debt-to-income ratio of the borrower (amount of debt divided by annual income)   
+- fico: The FICO credit score of the borrower   
+- days.with.cr.line: The number of days the borrower has had a credit line   
+- revol.bal: The borrower's revolving balance (amount unpaid at the end of the credit card billing cycle)   
+- revol.util: The borrower's revolving line utilization rate (the amount of the credit line used relative to total credit available)   
+- inq.last.6mths: The borrower's number of inquiries by creditors in the last 6 months   
+- delinq.2yrs: The number of times the borrower had been 30+ days past due on a payment in the past 2 years   
+- pub.rec: The borrower's number of derogatory public records (bankruptcy filings, tax liens, or judgments)   
+
+**Goal =** our purpose is to analyze the data to find new insights hidden in our data.
+
+# Open the Dataset
+We will import and open the data to get a better understanding about the problem
+```{r}
+data <- read.csv("loan_data.csv")
+head(data)
+```
+
+Firstly, we need to answer some basic questions:   
+1. How many fully paid data and not fully paid data?   
+2, Is there any correlation between the columns that makes someone cannot full pay the loan?   
+3. What kind of informations given which tend to fully paid and not fully paid?   
+
+If the difference value between not fully paid and fully paid is significant, there might be something wrong with either the lending company or the borrower.  
+
+
+# Data Wrangling and Cleaning
+
+Before going to the questions, we need to see the data from a big frame by using "summary()" and "str()". We also need to check if there is any null value in our data. If there is any (>5%), we will have to do an imputation to fill the missing. But, if there is a column with missing values as its majority or the column will not give any significant effect, we can drop them. 
+
+```{r}
+summary(data)
+```
+```{r}
+str(data)
+```
+We need to change "purpose" to be category type, because there are only 7 values which appear repeatedly. We change the data type so we can get more insight about the correlation between "purpose" and the other columns.
+
+```{r}
+data$purpose <- as.factor(data$purpose)
+```
+
+Check if there any missing value in our data.
+```{r}
+sum(is.na(data))
+```
+Based on the result, there is no missing value in our data. SO, we are ready to do data exploration.
+
+
+# Data Visualization
+
+In order to find insghts in our data, we can use visualization. Before visualizing our data, we need to import libraries needed for data visualization.
+
+```{r}
+library(ggplot2)
+library(dplyr)
+```
+
+We want to see a relation between "credit.policy" and "not.fully.paid"
+```{r}
+numtab <- data[, -c(2)]
+
+corcreditpaid <- aggregate(fico ~ credit.policy + not.fully.paid, data = numtab, FUN  = "length")
+names(corcreditpaid)[names(corcreditpaid) == 'fico'] <- "total"
+corcreditpaid
+```
+
+Visualize the corcreditpaid table in barplot
+```{r}
+corcreditpaid$credit.policy <- as.factor(corcreditpaid$credit.policy)
+corcreditpaid$not.fully.paid <- as.factor(corcreditpaid$not.fully.paid)
+
+corcreditpaid <- corcreditpaid %>%
+  group_by(credit.policy) %>%
+  mutate(percent = total/sum(total)) %>% 
+  ungroup() %>% 
+  mutate(percent = round(percent, 2)*100,
+         percent = paste(percent, "%"))
+
+ggplot(data = corcreditpaid, aes(fill = not.fully.paid, x = credit.policy, y = total)) +
+  geom_col(position = "dodge") +
+  geom_text(aes(label = percent), position = position_dodge(width = 1)) +
+  labs(x = "Credit Policy", y = "Number of Borrower")
+```
+
+More than 75% borrowers who pass the credit policy fully paid the loan and almost 75% borrowers who don't pass the credit policy succeeded to fully paid the loan. We can assume that the credit policy don't play a significant role to predict whether the borrower full paid the loan or not. To ensure our statement, we can see the correlation between "credit.policy" and "not.fully.paid".
+
+```{r}
+data$credit.policy <- as.numeric(data$credit.policy)
+data$not.fully.paid <- as.numeric(data$not.fully.paid)
+cor(data$credit.policy, data$not.fully.paid)
+```
+
+The correlation value is -0.1581192. Now we are sure that our statement is correct.
+
+**Insight 1: There are 87% people who passed the credit policy could pay their loan in full and there are 72% who failed to pass the credit policy could pay their loan in full. Hence, the credit policy status does not give strong effect in predicting the not fully paid status**
+
+We want to see the data distribution based on Interest Rate and Not Fully Paid Status.
+
+```{r}
+ggplot(numtab, aes(x = int.rate, y = not.fully.paid, color = int.rate)) +
+  geom_point() + geom_count() +
+
+  labs(title = "Scatter Plot Interest Rate and Not Fully Paid Status",
+       subtitle = "0 for Fully Paid and 1 for Not Fully Paid",
+       x = "Interest Rate",
+       y = "Not Fully Paid Status",
+       size = "Number of Data",
+       color = "Interest Rate"
+       )
+```
+
+**Insight 2: The majority of interest rate is below 10% and the borrowers can pay their loan in full.**
+
+
+Compare Interest Rate between borrowers who paid their loan in full and did not paid in full.
+```{r}
+intrate0 <- numtab[numtab$fully.paid == 0, c(2, 13)]
+intrate1 <- numtab[numtab$fully.paid == 1, c(2, 13)]
+```
+
+```{r}
+numtab$not.fully.paid <- as.factor(numtab$not.fully.paid)
+ggplot(data = numtab, aes(x = not.fully.paid, y = int.rate)) +
+  geom_boxplot() +
+  labs(title = "Boxplot of Not Fully Paid Based On Interest Rate",
+       x = "Not Fully Paid",
+       y = "interest Rate")
+```
+
+Intrerest rate of not fully paid (1) =    
+- MIn = 0.0705   
+- 1st Q = 0.1154   
+- 2nd Q (median) = 0.1316   
+- 3rd Q = 0.1482   
+- Max = 0.2164   
+
+Intrerest rate of not fully paid (0) =   
+- Min = 0.0600   
+- 1st Q = 0.0996   
+- 2nd Q (median) = 0.1218   
+- 3rd Q = 0.1387   
+- Max = 0.2121   
+ 
+**Insight 3: The median of people who did not paid their loan in full is higher than the ones who full paid.**
+
+To make a good prediction model, we have to make sure that we use enough amount of parameter so that there will be no noise. Noise that we have may affect our prediction, making it less accurate. To cope the problem, we need to see if there any unrelated data in our dataset.
+```{r}
+numtab$credit.policy <- as.numeric(numtab$credit.policy)
+numtab$fico <- as.numeric(numtab$fico)
+numtab$revol.bal <- as.numeric(numtab$revol.bal)
+numtab$inq.last.6mths <- as.numeric(numtab$inq.last.6mths)
+numtab$delinq.2yrs <- as.numeric(numtab$delinq.2yrs)
+numtab$pub.rec <- as.numeric(numtab$pub.rec)
+numtab$not.fully.paid <- as.numeric(numtab$not.fully.paid)
+
+as.data.frame(cor(numtab))
+```
+
+**From the table above, there is no column that has high correlation value with "not.fully.paid" column. But there are some columns that have high correlation value such as "fico" with "int.rate" and "fico" with "revol.util". Thus, there might be some hidden information between them that will help us to predict fully paid status. Further analysis needs to be done for building prediction model.**
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
